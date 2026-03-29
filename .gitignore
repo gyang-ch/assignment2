@@ -1,0 +1,66 @@
+# ── Credentials & secrets ─────────────────────────────────────────────────────
+.env
+.env.*
+secrets.json
+*sas_token*
+*sas-token*
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+.python-version
+
+# ── Dataset outputs (large — stored in Azure, not git) ────────────────────────
+museum_dataset/
+met_dataset/
+*/images/
+*/edges/
+*/edges_*/
+
+# ── Embeddings & checkpoints ──────────────────────────────────────────────────
+*.npz
+*.npy
+embeddings/
+embeddings_*/
+
+# ── Metadata dumps ────────────────────────────────────────────────────────────
+metadata.json
+done_uids.json
+*_ckpt.json
+
+# ── NGA bulk CSV cache ────────────────────────────────────────────────────────
+_cache/
+/tmp/
+nga_objects.csv
+nga_published_images.zip
+
+# ── Jupyter ───────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+__MACOSX/
+
+# ── PyTorch hub cache (downloaded model weights) ──────────────────────────────
+torch_home/
+hub/
+*.pt
+*.pth
+*.bin
+
+# ── IDEs ─────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
