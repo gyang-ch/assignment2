@@ -125,6 +125,42 @@ def embed_batch(model: torch.nn.Module,
     return feats.cpu().float().numpy()
 
 
+def _google_cdn_resize(url: str, size: int) -> str:
+    """
+    Append/replace the size hint on a Google CDN URL (lh3.googleusercontent.com).
+    These URLs support =s{N} to cap the longest side at N pixels server-side.
+    Non-Google URLs are returned unchanged.
+    """
+    if "googleusercontent.com" not in url:
+        return url
+    import re
+    # Strip any existing =s\d+ or =w\d+-h\d+ parameter
+    url = re.sub(r"=([swh]\d+[-hwc]*)+$", "", url)
+    return f"{url}=s{size}"
+
+
+def resize_to_max(img: Image.Image, max_side: int) -> Image.Image:
+    """
+    Downscale img so its longest side is at most max_side pixels,
+    preserving aspect ratio.  Images already smaller are returned unchanged.
+
+    Why 512 px (default)?
+      - DINOv2 transform: resize to 256 → crop to 224.  Anything ≥ 256 is
+        lossless for the model; 512 gives 2× headroom with no quality loss.
+      - Edge detection (XDoG/Canny/Sobel): 512 px retains enough contour
+        detail.  Working on 4000 px originals yields identical edge maps
+        at the cost of ~60× more compute and memory.
+      - Storage: 512 px JPEG ≈ 30–80 KB vs. 3–8 MB for full-res MET images.
+        For 500 k artworks that is ~25 GB vs. ~2.5 TB in Azure.
+    """
+    w, h = img.size
+    if max(w, h) <= max_side:
+        return img
+    scale = max_side / max(w, h)
+    new_w, new_h = max(1, int(w * scale)), max(1, int(h * scale))
+    return img.resize((new_w, new_h), Image.LANCZOS)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Edge extraction
 # ─────────────────────────────────────────────────────────────────────────────
@@ -507,12 +543,16 @@ class METCollector(MuseumCollector):
             except Exception as e:
                 tqdm.write(f"[{self.name}] WARN {oid}: {e}"); continue
             if not obj.get("primaryImage"): continue
+            # Prefer primaryImageSmall (~400-800 px) over the full-res CDN URL.
+            # Both point to the same image; the small version avoids downloading
+            # multi-MB files that get resized to 512 px anyway.
+            image_url = obj.get("primaryImageSmall") or obj["primaryImage"]
             yield ArtObject(
                 museum=self.name, object_id=str(oid),
                 title=obj.get("title",""), artist=obj.get("artistDisplayName",""),
                 date=obj.get("objectDate",""), medium=obj.get("medium",""),
                 department=obj.get("department",""), culture=obj.get("culture",""),
-                image_url=obj["primaryImage"], object_url=obj.get("objectURL",""),
+                image_url=image_url, object_url=obj.get("objectURL",""),
                 is_highlight=obj.get("isHighlight", False),
             )
 
@@ -546,6 +586,10 @@ class RijksCollector(MuseumCollector):
             for obj in items:
                 img_url = (obj.get("webImage") or {}).get("url","")
                 if not img_url: continue
+                # Rijksmuseum webImage URLs are served by Google (lh3.googleusercontent.com).
+                # Appending =s512 caps the long side at 512 px server-side,
+                # saving bandwidth before we resize locally anyway.
+                img_url = _google_cdn_resize(img_url, 512)
                 yield ArtObject(
                     museum=self.name, object_id=obj.get("objectNumber",""),
                     title=obj.get("title",""),
@@ -788,23 +832,27 @@ def fetch_and_store(session: requests.Session,
                     obj: ArtObject,
                     storage: StorageBackend,
                     extractor: EdgeExtractor,
-                    save_edges: bool) -> Optional[tuple[Image.Image, Image.Image]]:
+                    save_edges: bool,
+                    image_size: int = 512) -> Optional[tuple[Image.Image, Image.Image]]:
     """
-    Downloads the artwork image, stores RGB + optional edge to the storage
-    backend, and returns (rgb_pil, edge_pil) for embedding computation.
+    Downloads the artwork image, resizes to max image_size px (long side),
+    stores RGB + optional edge to the storage backend, and returns
+    (rgb_pil, edge_pil) for embedding computation.
     Returns None on download failure.
     """
     try:
         resp = session.get(obj.image_url, timeout=60)
         resp.raise_for_status()
-        img_bytes = resp.content
-        img       = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+        img = Image.open(io.BytesIO(resp.content)).convert("RGB")
     except Exception as e:
         tqdm.write(f"[img] WARN {obj.image_url[:80]} — {e}")
         return None
 
-    # Store RGB image
-    # Re-encode as JPEG to normalise format/quality
+    # Resize before storing and before any processing.
+    # This is the single most impactful change for bandwidth, storage, and speed.
+    img = resize_to_max(img, image_size)
+
+    # Store RGB image (already at reduced size — JPEG ~30–80 KB)
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=95)
     storage.put_image(obj.museum, obj.safe_id, buf.getvalue())
@@ -919,7 +967,8 @@ def run(args: argparse.Namespace) -> None:
             if obj.uid in done_uids or not obj.image_url:
                 continue
 
-            result = fetch_and_store(session, obj, storage, extractor, args.save_edges)
+            result = fetch_and_store(session, obj, storage, extractor,
+                                     args.save_edges, args.image_size)
             if result is None:
                 continue
 
@@ -1011,10 +1060,15 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--xdog-eps",   type=float, default=0.01)
 
     # Model / hardware
-    p.add_argument("--model",      choices=list(DINOV2_MODELS.keys()), default="base")
-    p.add_argument("--batch-size", type=int, default=32)
-    p.add_argument("--device",     default=None,
+    p.add_argument("--model",       choices=list(DINOV2_MODELS.keys()), default="base")
+    p.add_argument("--batch-size",  type=int, default=32)
+    p.add_argument("--device",      default=None,
                    help="cuda / mps / cpu  (auto-detected if omitted)")
+    p.add_argument("--image-size",  type=int, default=512,
+                   help=("Resize images so the longest side is at most this many pixels "
+                         "before storing and embedding. 512 is optimal: gives DINOv2 and "
+                         "edge detection enough detail while saving ~60× storage vs. "
+                         "full-res MET/Rijksmuseum images. Min useful value: 256."))
 
     # Auth
     p.add_argument("--rijks-key", default="",
