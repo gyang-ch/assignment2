@@ -1,0 +1,22 @@
+# Museum DINOv2 Embedding Pipeline — dependencies
+# ─────────────────────────────────────────────────────────────────────────────
+# Step 1 — install PyTorch matching your hardware:
+#
+#   Mac (Apple Silicon MPS):
+#     pip install torch torchvision
+#
+#   RunPod / Linux with RTX 4090 (CUDA 12.1):
+#     pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+#
+# Step 2 — install everything else:
+#   pip install -r requirements_met.txt
+# ─────────────────────────────────────────────────────────────────────────────
+
+requests>=2.31
+Pillow>=10.0
+numpy>=1.24
+tqdm>=4.66
+torchvision>=0.16
+opencv-python>=4.8       # Canny + Sobel edge detection
+scipy>=1.11              # Gaussian filters for XDoG
+azure-storage-blob>=12.19  # Azure Blob Storage (only needed when --azure-sas-url is used)
