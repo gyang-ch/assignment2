@@ -53,6 +53,7 @@ import time
 import zipfile
 from abc import ABC, abstractmethod
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Iterator, Optional
@@ -919,6 +920,45 @@ def fetch_and_store(session: requests.Session,
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Parallel image fetch
+# ─────────────────────────────────────────────────────────────────────────────
+
+def parallel_fetch(objs: list[ArtObject],
+                   session: requests.Session,
+                   storage: StorageBackend,
+                   extractor: EdgeExtractor,
+                   save_edges: bool,
+                   image_size: int,
+                   workers: int) -> list[tuple[ArtObject, Image.Image, Image.Image]]:
+    """
+    Download + store a list of ArtObjects concurrently.
+    Returns (obj, rgb_pil, edge_pil) tuples for successful downloads only.
+
+    Why threads (not asyncio)?
+      fetch_and_store calls PIL and cv2, which release the GIL during I/O.
+      For network-bound work (download + Azure upload) ThreadPoolExecutor
+      gives near-linear speedup up to ~16 workers before Azure throughput
+      becomes the ceiling.  No async refactor needed.
+    """
+    results: list[tuple[ArtObject, Image.Image, Image.Image]] = []
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        future_to_obj = {
+            pool.submit(fetch_and_store, session, obj, storage,
+                        extractor, save_edges, image_size): obj
+            for obj in objs
+        }
+        for future in as_completed(future_to_obj):
+            obj = future_to_obj[future]
+            try:
+                r = future.result()
+                if r is not None:
+                    results.append((obj, r[0], r[1]))
+            except Exception as e:
+                tqdm.write(f"[img] WARN {obj.uid}: {e}")
+    return results
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Collector builder
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1003,11 +1043,34 @@ def run(args: argparse.Namespace) -> None:
 
     # ── Per-museum loop ───────────────────────────────────────────────────
     for collector in collectors:
-        m_name = collector.name
-        limit  = 0 if args.no_limit else args.limit
-        step   = 0
+        m_name   = collector.name
+        limit    = 0 if args.no_limit else args.limit
+        step     = 0
+        # How many objects to buffer before firing a parallel download round.
+        # Larger = better GPU utilisation; smaller = more frequent checkpoints.
+        prefetch = args.batch_size * args.workers
 
         print(f"\n{'─'*60}\n  Museum: {m_name.upper()}\n{'─'*60}")
+
+        pending: list[ArtObject] = []   # objects waiting to be downloaded
+
+        def _drain(objs: list[ArtObject]) -> int:
+            """Download objs in parallel, push results into embedding batch."""
+            nonlocal step
+            fetched = parallel_fetch(objs, session, storage, extractor,
+                                     args.save_edges, args.image_size, args.workers)
+            for obj, rgb_img, edge_img in fetched:
+                batch_rgb.append(rgb_img)
+                batch_edges.append(edge_img)
+                batch_objs.append(obj)
+                done_uids.add(obj.uid)
+                if len(batch_rgb) >= args.batch_size:
+                    flush_batch()
+                step += 1
+                if step % SAVE_EVERY == 0:
+                    checkpoint()
+                    tqdm.write(f"[{m_name}] checkpoint — {len(all_uids):,} total")
+            return len(fetched)
 
         for obj in tqdm(collector.iter_objects(limit=limit),
                         desc=m_name, unit="obj",
@@ -1016,24 +1079,18 @@ def run(args: argparse.Namespace) -> None:
             if obj.uid in done_uids or not obj.image_url:
                 continue
 
-            result = fetch_and_store(session, obj, storage, extractor,
-                                     args.save_edges, args.image_size)
-            if result is None:
-                continue
+            pending.append(obj)
 
-            rgb_img, edge_img = result
-            batch_rgb.append(rgb_img)
-            batch_edges.append(edge_img)
-            batch_objs.append(obj)
-            done_uids.add(obj.uid)
+            # Fire a parallel download round once the prefetch window is full.
+            # While this round downloads, iter_objects() is paused (no API calls),
+            # which naturally spaces out requests to rate-limited APIs.
+            if len(pending) >= prefetch:
+                _drain(pending)
+                pending.clear()
 
-            if len(batch_rgb) >= args.batch_size:
-                flush_batch()
-
-            step += 1
-            if step % SAVE_EVERY == 0:
-                checkpoint()
-                tqdm.write(f"[{m_name}] checkpoint — {len(all_uids):,} total embeddings")
+        # Drain any remaining objects
+        if pending:
+            _drain(pending)
 
         flush_batch()
         checkpoint()
@@ -1109,6 +1166,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--xdog-eps",   type=float, default=0.01)
 
     # Model / hardware
+    p.add_argument("--workers",     type=int, default=8,
+                   help=("Parallel image download threads. "
+                         "8 is a good default; raise to 16 on fast connections. "
+                         "Does not affect API metadata requests, which stay sequential "
+                         "to respect each museum's rate limit."))
     p.add_argument("--model",       choices=list(DINOV2_MODELS.keys()), default="base")
     p.add_argument("--batch-size",  type=int, default=32)
     p.add_argument("--device",      default=None,
