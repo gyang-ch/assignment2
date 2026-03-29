@@ -48,6 +48,7 @@ import csv
 import io
 import json
 import os
+import random
 import time
 import zipfile
 from abc import ABC, abstractmethod
@@ -499,17 +500,62 @@ def save_checkpoint(storage: StorageBackend,
 # ─────────────────────────────────────────────────────────────────────────────
 
 class MuseumCollector(ABC):
-    name:  str   = ""
-    delay: float = 0.1
+    name:       str   = ""
+    delay:      float = 0.1   # base seconds between requests
+    max_retries: int  = 6     # attempts before giving up on one URL
 
     def __init__(self, session: requests.Session):
         self.session = session
 
     def get(self, url: str, **kwargs) -> requests.Response:
-        time.sleep(self.delay)
-        r = self.session.get(url, timeout=30, **kwargs)
-        r.raise_for_status()
-        return r
+        """
+        GET with jittered delay + exponential backoff on rate-limit responses.
+
+        Museums return different status codes for rate limiting:
+          MET       — 403 (undocumented; real rate limit, not auth)
+          ARTIC     — 429
+          Others    — 429 or 503
+
+        Strategy:
+          - Always sleep self.delay * jitter(0.8–1.2) before every request
+          - On 403 / 429 / 503: wait backoff_base * 2^attempt seconds, then retry
+          - backoff_base starts at 5 s so the first wait is 5 s, then 10, 20 …
+          - After max_retries the exception propagates to the caller's WARN handler
+        """
+        backoff = 5.0   # seconds for first retry wait
+
+        for attempt in range(self.max_retries):
+            # Jitter prevents lock-step bursts when processing many IDs
+            jitter = random.uniform(0.8, 1.2)
+            time.sleep(self.delay * jitter)
+
+            try:
+                r = self.session.get(url, timeout=30, **kwargs)
+            except requests.exceptions.ConnectionError as exc:
+                if attempt == self.max_retries - 1:
+                    raise
+                wait = backoff * (2 ** attempt)
+                tqdm.write(f"[{self.name}] connection error, retrying in {wait:.0f}s — {exc}")
+                time.sleep(wait)
+                continue
+
+            if r.status_code in (403, 429, 503):
+                if attempt == self.max_retries - 1:
+                    r.raise_for_status()   # propagate on final attempt
+                # Honour Retry-After header if present (ARTIC sends it)
+                retry_after = r.headers.get("Retry-After")
+                wait = float(retry_after) if retry_after else backoff * (2 ** attempt)
+                tqdm.write(
+                    f"[{self.name}] HTTP {r.status_code} — "
+                    f"rate limited, waiting {wait:.0f}s (attempt {attempt+1}/{self.max_retries})"
+                )
+                time.sleep(wait)
+                continue
+
+            r.raise_for_status()
+            return r
+
+        raise RuntimeError(f"[{self.name}] gave up after {self.max_retries} attempts: {url}")
 
     @abstractmethod
     def iter_objects(self, limit: int = 0) -> Iterator[ArtObject]: ...
@@ -519,7 +565,10 @@ class MuseumCollector(ABC):
 
 class METCollector(MuseumCollector):
     name  = "met"
-    delay = 0.05
+    # MET advertises 80 req/s but in practice throttles aggressively after
+    # short bursts and returns 403 (not 429).  1 req/s is the safe sustained
+    # rate; combined with the ±20% jitter in get() this averages ~0.9 req/s.
+    delay = 1.0
     BASE  = "https://collectionapi.metmuseum.org/public/collection/v1"
 
     def __init__(self, session, query="*", department_id=None, highlights_only=False):
