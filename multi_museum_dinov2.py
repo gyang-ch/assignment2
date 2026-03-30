@@ -99,6 +99,8 @@ DINOV2_MODELS = {
     "giant": "dinov2_vitg14",   # D = 1536
 }
 
+DINOV2_DIM_TO_SIZE = {384: "small", 768: "base", 1024: "large", 1536: "giant"}
+
 DINOV2_TRANSFORM = transforms.Compose([
     transforms.Resize(256, interpolation=transforms.InterpolationMode.BICUBIC),
     transforms.CenterCrop(224),
@@ -1004,7 +1006,6 @@ def run(args: argparse.Namespace) -> None:
 
     storage   = make_storage(args)
     device    = get_device(args.device)
-    model     = load_dinov2(args.model, device)
     extractor = EdgeExtractor(method=args.edge_method, **_edge_kwargs(args))
     session   = requests.Session()
     session.headers["User-Agent"] = "museum-dinov2-sbir/1.0 (research)"
@@ -1020,6 +1021,29 @@ def run(args: argparse.Namespace) -> None:
         load_checkpoint(storage, edge_tag)
     if edge_tag not in emb_lists: emb_lists[edge_tag] = []
     if "rgb"    not in emb_lists: emb_lists["rgb"]    = []
+
+    # ── Auto-detect model size from checkpoint embeddings ─────────────────
+    model_size = args.model
+    for tag, arrays in emb_lists.items():
+        for arr in arrays:
+            if arr.ndim >= 2 and arr.shape[1] > 0:
+                ckpt_dim = arr.shape[1]
+                ckpt_size = DINOV2_DIM_TO_SIZE.get(ckpt_dim)
+                if ckpt_size and ckpt_size != model_size:
+                    print(f"[checkpoint] Existing embeddings have D={ckpt_dim} "
+                          f"(model={ckpt_size}), overriding --model {model_size} "
+                          f"→ {ckpt_size} to stay compatible")
+                    model_size = ckpt_size
+                elif not ckpt_size:
+                    raise ValueError(
+                        f"Checkpoint has D={ckpt_dim} which doesn't match any "
+                        f"known DINOv2 model. Delete checkpoint files to start fresh.")
+                break
+        else:
+            continue
+        break
+
+    model = load_dinov2(model_size, device)
 
     SAVE_EVERY = max(1, args.batch_size * 10)
 
