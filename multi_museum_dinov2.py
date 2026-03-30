@@ -807,7 +807,7 @@ class NGACollector(MuseumCollector):
     delay = 0.05
     OBJECTS_CSV_URL = ("https://raw.githubusercontent.com/NationalGalleryOfArt/"
                        "opendata/main/data/objects.csv")
-    IMAGES_ZIP_URL  = ("https://raw.githubusercontent.com/NationalGalleryOfArt/"
+    IMAGES_ZIP_URL  = ("https://media.githubusercontent.com/media/NationalGalleryOfArt/"
                        "opendata/main/data/published_images.zip")
     IIIF_BASE  = "https://media.nga.gov/iiif/2"
     IMG_SUFFIX = "full/!600,600/0/default.jpg"
