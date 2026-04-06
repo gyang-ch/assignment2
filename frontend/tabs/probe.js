@@ -1,24 +1,9 @@
 // Probe tab — freehand drawing or image upload to search similar artworks via DINOv2 embeddings.
-// Search strategy: try Modal backend first; fall back to in-browser transformers.
+// Search strategy: Modal backend only.
 
 const BACKEND_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   ? 'http://localhost:8000'
   : 'https://gyang-ch--sketch-art-sbir-sbirservice-web.modal.run';
-let _backendAvailable = null; // null = unchecked, true = up, false = down
-
-async function checkBackend() {
-  if (_backendAvailable !== null) return _backendAvailable;
-  try {
-    const ctrl  = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 2000);
-    const resp  = await fetch(`${BACKEND_URL}/api/health`, { signal: ctrl.signal });
-    clearTimeout(timer);
-    _backendAvailable = resp.ok;
-  } catch {
-    _backendAvailable = false;
-  }
-  return _backendAvailable;
-}
 
 async function searchViaBackend(blob, topK) {
   const fd = new FormData();
@@ -30,9 +15,8 @@ async function searchViaBackend(blob, topK) {
   return results;
 }
 
-let _editor       = null;
-let _searchEngine = null;
-let searching     = false;
+let _editor   = null;
+let searching = false;
 let uploadedBlob  = null;
 let _mounted      = false;
 
@@ -143,14 +127,6 @@ export function mount() {
     }
   }
 
-  async function ensureSearchEngine() {
-    if (_searchEngine) return;
-    _searchEngine = await import('../util/search-engine.js');
-    _searchEngine.initSearchEngine(setStatus).catch(err =>
-      setStatus(`Search engine error: ${err.message}`)
-    );
-  }
-
   async function doSearch() {
     if (searching) return;
     await ensureEditor();
@@ -164,16 +140,8 @@ export function mount() {
     try {
       const blob = await _editor.exportAsBlob(512);
       if (!blob) { setStatus('Export failed.'); showEmpty(); return; }
-      const useBackend = await checkBackend();
-      let results;
-      if (useBackend) {
-        setStatus('Searching via backend…');
-        results = await searchViaBackend(blob, 12);
-      } else {
-        setStatus('Backend offline — searching in-browser…');
-        await ensureSearchEngine();
-        results = await _searchEngine.searchImage(blob, 12);
-      }
+      setStatus('Searching…');
+      const results = await searchViaBackend(blob, 12);
       renderResults(results);
       setStatus(`Found ${results.length} results.`);
     } catch (err) {
@@ -281,16 +249,8 @@ export function mount() {
     btnUploadSearch.disabled = true;
     showLoading();
     try {
-      const useBackend = await checkBackend();
-      let results;
-      if (useBackend) {
-        setStatus('Searching via backend…');
-        results = await searchViaBackend(uploadedBlob, 12);
-      } else {
-        setStatus('Backend offline — searching in-browser…');
-        await ensureSearchEngine();
-        results = await _searchEngine.searchImage(uploadedBlob, 12);
-      }
+      setStatus('Searching…');
+      const results = await searchViaBackend(uploadedBlob, 12);
       renderResults(results);
       setStatus(`Found ${results.length} results.`);
     } catch (err) {
