@@ -1,9 +1,9 @@
 // Probe tab — freehand drawing or image upload to search similar artworks via DINOv2 embeddings.
 // Search strategy: try Modal backend first; fall back to in-browser transformers.
 
-// After `modal deploy backend/api.py`, replace this with your Modal URL:
-//   https://<username>--sketch-art-sbir-sbirservice-web.modal.run
-const BACKEND_URL = 'https://gyang-ch--sketch-art-sbir-sbirservice-web.modal.run';
+const BACKEND_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? 'http://localhost:8000'
+  : 'https://gyang-ch--sketch-art-sbir-sbirservice-web.modal.run';
 let _backendAvailable = null; // null = unchecked, true = up, false = down
 
 async function checkBackend() {
