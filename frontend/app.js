@@ -76,5 +76,11 @@ function teardownSketch(name) {
   if (el) el.innerHTML = '';
 }
 
+// Warm up the Modal backend on page load so the container is ready before the
+// user navigates to the Probe tab. Fire-and-forget — errors are silently ignored.
+import('./util/azure-config.js').then(({ BACKEND_URL }) => {
+  fetch(`${BACKEND_URL}/api/health`).catch(() => {});
+});
+
 // Start on the first tab
 switchTab('circuitgrid');

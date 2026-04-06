@@ -26,7 +26,7 @@ import modal
 def _download_dinov2():
     """Pre-download DINOv2 weights into the image layer."""
     import torch
-    torch.hub.load("facebookresearch/dinov2", "dinov2_vitb14", verbose=False)
+    torch.hub.load("facebookresearch/dinov2", "dinov2_vitl14", verbose=False)
 
 
 image = (
@@ -73,11 +73,22 @@ class SBIRService:
             self.device = torch.device("cpu")
             print("[device] CPU")
 
-        # ── DINOv2 model ──────────────────────────────────────────────────────
-        # dinov2_vitb14 → 768-dim embeddings, matches embeddings_edges_xdog.npz
-        print("[model] Loading DINOv2 vitb14 …")
+        # ── DINOv2 model (auto-detect size from embedding dim) ─────────────────
+        edge_path = EMBEDDINGS_DIR / "embeddings_edges_xdog.npz"
+        sample = np.load(edge_path, allow_pickle=True)
+        dim = sample["embeddings"].shape[1]
+        DIM_TO_MODEL = {
+            384:  "dinov2_vits14",
+            768:  "dinov2_vitb14",
+            1024: "dinov2_vitl14",
+            1536: "dinov2_vitg14",
+        }
+        model_name = DIM_TO_MODEL.get(dim)
+        if not model_name:
+            raise ValueError(f"Unexpected embedding dim {dim}")
+        print(f"[model] Loading {model_name} (dim={dim}) …")
         self.model = torch.hub.load(
-            "facebookresearch/dinov2", "dinov2_vitb14", verbose=False
+            "facebookresearch/dinov2", model_name, verbose=False
         )
         self.model.eval().to(self.device)
         print("[model] Ready")
@@ -92,9 +103,8 @@ class SBIRService:
         ])
 
         # ── Embeddings index ──────────────────────────────────────────────────
-        edge_path = EMBEDDINGS_DIR / "embeddings_edges_xdog.npz"
         print(f"[index] Loading {edge_path} …")
-        edge_data = np.load(edge_path, allow_pickle=True)
+        edge_data = sample  # reuse the npz already loaded above
         self.uids = list(edge_data["uids"])
         embeddings = torch.from_numpy(edge_data["embeddings"]).to(self.device)
         self.embeddings = F.normalize(embeddings, dim=-1)

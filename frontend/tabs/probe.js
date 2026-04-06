@@ -1,9 +1,7 @@
 // Probe tab — freehand drawing or image upload to search similar artworks via DINOv2 embeddings.
 // Search strategy: Modal backend only.
 
-const BACKEND_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-  ? 'http://localhost:8000'
-  : 'https://gyang-ch--sketch-art-sbir-sbirservice-web.modal.run';
+import { BACKEND_URL } from '../util/azure-config.js';
 
 async function searchViaBackend(blob, topK) {
   const fd = new FormData();
