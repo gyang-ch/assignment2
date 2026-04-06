@@ -2,8 +2,8 @@
 // Each stripe's colour = dominant colour, height = visual complexity.
 // Hover plays a sound mapped to colour and complexity. Click opens a detail panel.
 
-import { AZURE_DATA_URL, AZURE_SAS_TOKEN } from '../util/azure-config.js';
-const DATA_URL    = `${AZURE_DATA_URL}/style_entropy.json?${AZURE_SAS_TOKEN}`;
+import { dataUrl } from '../util/azure-config.js';
+const DATA_URL    = dataUrl('style_entropy.json');
 const CONTROLS_H  = 44;
 const COL_GAP     = 1;
 const ROW_GAP     = 3;

@@ -1,4 +1,34 @@
 // Probe tab — freehand drawing or image upload to search similar artworks via DINOv2 embeddings.
+// Search strategy: try Modal backend first; fall back to in-browser transformers.
+
+// After `modal deploy backend/api.py`, replace this with your Modal URL:
+//   https://<username>--sketch-art-sbir-sbirservice-web.modal.run
+const BACKEND_URL = 'https://gyang-ch--sketch-art-sbir-sbirservice-web.modal.run';
+let _backendAvailable = null; // null = unchecked, true = up, false = down
+
+async function checkBackend() {
+  if (_backendAvailable !== null) return _backendAvailable;
+  try {
+    const ctrl  = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 2000);
+    const resp  = await fetch(`${BACKEND_URL}/api/health`, { signal: ctrl.signal });
+    clearTimeout(timer);
+    _backendAvailable = resp.ok;
+  } catch {
+    _backendAvailable = false;
+  }
+  return _backendAvailable;
+}
+
+async function searchViaBackend(blob, topK) {
+  const fd = new FormData();
+  fd.append('sketch', blob, 'sketch.png');
+  fd.append('top_k', String(topK));
+  const resp = await fetch(`${BACKEND_URL}/api/search`, { method: 'POST', body: fd });
+  if (!resp.ok) throw new Error(`Backend HTTP ${resp.status}`);
+  const { results } = await resp.json();
+  return results;
+}
 
 let _editor       = null;
 let _searchEngine = null;
@@ -130,13 +160,20 @@ export function mount() {
     }
     searching = true;
     btnSearch.disabled = true;
-    setStatus('Exporting sketch & searching...');
     showLoading();
     try {
-      await ensureSearchEngine();
       const blob = await _editor.exportAsBlob(512);
       if (!blob) { setStatus('Export failed.'); showEmpty(); return; }
-      const results = await _searchEngine.searchImage(blob, 12);
+      const useBackend = await checkBackend();
+      let results;
+      if (useBackend) {
+        setStatus('Searching via backend…');
+        results = await searchViaBackend(blob, 12);
+      } else {
+        setStatus('Backend offline — searching in-browser…');
+        await ensureSearchEngine();
+        results = await _searchEngine.searchImage(blob, 12);
+      }
       renderResults(results);
       setStatus(`Found ${results.length} results.`);
     } catch (err) {
@@ -242,11 +279,18 @@ export function mount() {
     if (searching || !uploadedBlob) return;
     searching = true;
     btnUploadSearch.disabled = true;
-    setStatus('Embedding image…');
     showLoading();
     try {
-      await ensureSearchEngine();
-      const results = await _searchEngine.searchImage(uploadedBlob, 12);
+      const useBackend = await checkBackend();
+      let results;
+      if (useBackend) {
+        setStatus('Searching via backend…');
+        results = await searchViaBackend(uploadedBlob, 12);
+      } else {
+        setStatus('Backend offline — searching in-browser…');
+        await ensureSearchEngine();
+        results = await _searchEngine.searchImage(uploadedBlob, 12);
+      }
       renderResults(results);
       setStatus(`Found ${results.length} results.`);
     } catch (err) {

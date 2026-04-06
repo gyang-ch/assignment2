@@ -1,10 +1,10 @@
-import { AZURE_DATA_URL, AZURE_SAS_TOKEN } from './azure-config.js';
+import { dataUrl } from './azure-config.js';
 
 const MODEL_ID = 'Xenova/dinov2-small';
 
-const EMBEDDINGS_URL = `${AZURE_DATA_URL}/embeddings.bin?${AZURE_SAS_TOKEN}`;
-const UIDS_URL       = `${AZURE_DATA_URL}/uids.json?${AZURE_SAS_TOKEN}`;
-const METADATA_URL   = `${AZURE_DATA_URL}/metadata.json?${AZURE_SAS_TOKEN}`;
+const EMBEDDINGS_URL = dataUrl('embeddings.bin');
+const UIDS_URL       = dataUrl('uids.json');
+const METADATA_URL   = dataUrl('metadata.json');
 
 let _processor  = null;
 let _model      = null;

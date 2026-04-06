@@ -2,7 +2,7 @@
 // Hovering plays a note; clicking triggers a ripple cascade. Uses Tone.js for audio.
 
 import p5 from 'p5';
-import { AZURE_DATA_URL, AZURE_SAS_TOKEN, azureFallback } from '../util/azure-config.js';
+import { dataUrl, azureFallback } from '../util/azure-config.js';
 
 const CLUSTER_COLORS_HEX = [
   '#6c63ff','#ff6b8a','#50e3c2','#f5a623','#bd10e0',
@@ -21,7 +21,7 @@ const SCALES = [
 ];
 const DRONE_NOTES = ['C2','D2','E2','G2','A2','C3','F2','Bb2','Eb3','Ab2','B2','F#2'];
 
-const DATA_URL       = `${AZURE_DATA_URL}/artworks_sonification.json?${AZURE_SAS_TOKEN}`;
+const DATA_URL       = dataUrl('artworks_sonification.json');
 const FEATURE_LABELS = ['Structure','Palette','Texture'];
 const FEATURE_KEYS   = ['structure','palette','texture'];
 

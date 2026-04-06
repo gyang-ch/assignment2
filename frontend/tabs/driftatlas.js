@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { AZURE_DATA_URL, AZURE_SAS_TOKEN } from '../util/azure-config.js';
+import { dataUrl } from '../util/azure-config.js';
 
-const DATA_URL = `${AZURE_DATA_URL}/style_entropy.json?${AZURE_SAS_TOKEN}`;
+const DATA_URL = dataUrl('style_entropy.json');
 
 function isValidHexColor(value) {
   return typeof value === 'string' && /^#([0-9a-f]{6})$/i.test(value);
