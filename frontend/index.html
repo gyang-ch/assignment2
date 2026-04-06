@@ -3,43 +3,80 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sketch → Art</title>
-  <link rel="stylesheet" href="css/style.css" />
+  <title>DH6018 Assignment 2</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div id="app">
 
-    <!-- Header -->
     <header>
-      <h1>Sketch → Art</h1>
+      <a class="nav-brand" href="#">
+        <div class="nav-logo-badge">DH</div>
+        <h1>DH6018 Assignment 2</h1>
+      </a>
 
-      <!-- Tabs -->
       <nav class="tabs">
-        <button class="tab active" data-tab="search">Search</button>
-        <button class="tab" data-tab="palimpsest">Palimpsest</button>
+        <button class="tab active" data-tab="circuitgrid">Grid</button>
+        <button class="tab" data-tab="gyroid">Gyroid</button>
+        <button class="tab" data-tab="hopfthree">Hopf</button>
+        <button class="tab" data-tab="morphogenesisthree">Morphogenesis</button>
+        <button class="tab" data-tab="ripple">Ripple</button>
+        <button class="tab" data-tab="chromaticfugue">Chromatic Fugue</button>
+        <button class="tab" data-tab="driftatlas">Drift Atlas</button>
+        <button class="tab" data-tab="probe">Probe</button>
       </nav>
 
-      <div class="header-right">
-        <label class="backend-label">
-          Backend
-          <input id="backend-url" type="text" value="http://localhost:8000"
-                 spellcheck="false" class="backend-input" />
-        </label>
-      </div>
     </header>
 
-    <!-- ═══════════════ Search Tab ═══════════════ -->
-    <div id="tab-search" class="tab-content active">
+    <!-- Probe tab -->
+    <div id="tab-probe" class="tab-content" hidden>
       <div class="main-content">
 
         <!-- Drawing panel -->
         <div class="panel draw-panel">
           <div class="panel-title">Draw your sketch</div>
           <div id="editor-container" class="editor-container"></div>
-          <div class="toolbar">
+          <div class="toolbar upload-actions">
             <div class="toolbar-group" style="margin-left:auto">
-              <button id="btn-clear" class="btn btn-danger">Clear all</button>
-              <button id="btn-search" class="btn btn-primary">Search</button>
+              <button id="btn-clear" type="button" class="glow-btn-group probe-clear-btn">
+                <div class="glow-btn-fill"></div>
+                <div class="glow-btn-content">Clear all</div>
+              </button>
+              <button id="btn-search" type="button" class="glow-btn-group probe-search-btn">
+                <div class="glow-btn-fill"></div>
+                <div class="glow-btn-content">Search</div>
+              </button>
+            </div>
+          </div>
+
+          <div class="upload-divider"></div>
+
+          <div class="panel-title">Upload image</div>
+          <div id="upload-dropzone" class="upload-dropzone">
+            <input id="upload-input" type="file" accept="image/*,.heic,.heif" hidden />
+            <div id="upload-prompt" class="upload-prompt">
+              <div class="upload-icon">&#8613;</div>
+              <span>Drop an image here, or click to browse</span>
+              <span class="upload-formats">JPG · PNG · WebP · HEIC · AVIF · TIFF · BMP</span>
+            </div>
+            <div id="upload-preview" class="upload-preview" hidden>
+              <img id="upload-img" alt="Uploaded image" />
+              <div id="upload-no-preview" class="upload-no-preview" hidden>
+                <div class="upload-icon">&#10003;</div>
+                <span>Image loaded — preview not available in this browser</span>
+              </div>
+            </div>
+          </div>
+          <div class="toolbar upload-actions">
+            <div class="toolbar-group" style="margin-left:auto">
+              <button id="btn-upload-clear" type="button" class="glow-btn-group probe-clear-btn" disabled>
+                <div class="glow-btn-fill"></div>
+                <div class="glow-btn-content">Clear</div>
+              </button>
+              <button id="btn-upload-search" type="button" class="glow-btn-group probe-search-btn" disabled>
+                <div class="glow-btn-fill"></div>
+                <div class="glow-btn-content">Search</div>
+              </button>
             </div>
           </div>
         </div>
@@ -57,66 +94,65 @@
       </div>
     </div>
 
-    <!-- ═══════════════ Palimpsest Tab ═══════════════ -->
-    <div id="tab-palimpsest" class="tab-content" hidden>
-      <div class="palimpsest-layout">
-
-        <!-- Sidebar: artwork selection -->
-        <div class="panel palimpsest-sidebar">
-          <div class="panel-title">Select artwork</div>
-
-          <!-- Text search -->
-          <div class="artwork-search">
-            <input id="pal-search-input" type="text"
-                   placeholder="Search by title or artist..."
-                   class="search-input" />
-            <button id="pal-search-btn" class="btn">Find</button>
-            <button id="pal-random-btn" class="btn">Random</button>
-          </div>
-
-          <!-- Mini artwork grid -->
-          <div id="pal-artwork-grid" class="artwork-mini-grid"></div>
-
-          <!-- Selected artwork info -->
-          <div id="pal-selected" class="selected-artwork" hidden>
-            <div class="panel-title" style="margin-top:12px">Active artwork</div>
-            <img id="pal-selected-img" />
-            <div id="pal-selected-title" class="card-title"></div>
-            <div id="pal-selected-meta" class="card-meta"></div>
-          </div>
-        </div>
-
-        <!-- Main canvas -->
-        <div class="panel palimpsest-main">
-          <div class="panel-title">
-            Draw to reveal
-            <span id="pal-similarity" class="similarity-badge">Similarity: --</span>
-          </div>
-          <div id="palimpsest-canvas" class="palimpsest-canvas"></div>
-          <div class="toolbar">
-            <div class="toolbar-group">
-              <label style="font-size:.75rem;color:var(--text-dim)">Brush</label>
-              <input id="pal-brush" type="range" min="2" max="50" value="12" />
-              <span id="pal-brush-label" style="font-size:.75rem;min-width:18px">12</span>
-            </div>
-            <div class="toolbar-group" style="margin-left:auto">
-              <button id="pal-clear" class="btn btn-danger">Clear</button>
-              <button id="pal-compute" class="btn btn-primary">Recompute similarity</button>
-            </div>
-          </div>
-        </div>
-
+    <!-- Generative sketch tabs -->
+    <div id="tab-circuitgrid" class="tab-content tab-content-contained active">
+      <div class="generative-layout">
+        <div class="generative-sketch-canvas generative-sketch-canvas-contained" id="generative-sketch-2"></div>
       </div>
     </div>
 
-    <!-- Status bar -->
-    <footer class="status-bar">
-      <span id="status-text">Loading...</span>
-      <span>Enter = search</span>
-    </footer>
+    <div id="tab-gyroid" class="tab-content tab-content-contained" hidden>
+      <div class="generative-layout">
+        <div class="generative-sketch-canvas generative-sketch-canvas-contained" id="generative-sketch-3"></div>
+      </div>
+    </div>
+
+    <div id="tab-hopfthree" class="tab-content tab-content-contained" hidden>
+      <div class="generative-layout">
+        <div class="generative-sketch-canvas generative-sketch-canvas-contained" id="generative-sketch-8"></div>
+      </div>
+    </div>
+
+    <div id="tab-morphogenesisthree" class="tab-content tab-content-contained" hidden>
+      <div class="generative-layout">
+        <div class="generative-sketch-canvas generative-sketch-canvas-contained" id="generative-sketch-9"></div>
+      </div>
+    </div>
+
+    <div id="tab-ripple" class="tab-content" hidden>
+      <div class="generative-layout">
+        <div class="generative-sketch-canvas" id="generative-sketch-10"></div>
+      </div>
+    </div>
+
+    <div id="tab-chromaticfugue" class="tab-content" hidden>
+      <div class="generative-layout">
+        <div class="generative-sketch-canvas" id="generative-sketch-11"></div>
+      </div>
+    </div>
+
+    <div id="tab-driftatlas" class="tab-content" hidden>
+      <div class="generative-layout">
+        <div class="generative-sketch-canvas" id="generative-sketch-13"></div>
+      </div>
+    </div>
 
   </div>
 
-  <script type="module" src="js/app.js"></script>
+  <!-- Load p5 and GSAP as globals before the ES modules run -->
+  <script src="https://cdn.jsdelivr.net/npm/p5@2.2.3/lib/p5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+  <script type="importmap">
+  {
+    "imports": {
+      "p5":                        "./util/p5-shim.js",
+      "three":                     "https://esm.sh/three@0.180.0",
+      "perfect-freehand":          "https://esm.sh/perfect-freehand@1.2.3",
+      "@huggingface/transformers": "https://esm.sh/@huggingface/transformers@4.0.1"
+    }
+  }
+  </script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>

@@ -31,6 +31,13 @@ import torch.nn.functional as F
 from PIL import Image
 from torchvision import transforms
 
+# HEIC/HEIF support (Apple photos, iPhones). No-op if not installed.
+try:
+    import pillow_heif
+    pillow_heif.register_heif_opener()
+except ImportError:
+    pass
+
 # FastAPI
 import requests as http_requests
 from fastapi import FastAPI, File, Form, Query, UploadFile

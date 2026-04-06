@@ -19,6 +19,9 @@ venv/
 env/
 .python-version
 
+# ── Frontend data (large — stored in Azure Blob, fetched at runtime) ──────────
+frontend/data/
+
 # ── Dataset outputs (large — stored in Azure, not git) ────────────────────────
 museum_dataset/
 met_dataset/
